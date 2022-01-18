@@ -7,28 +7,38 @@ import java.io.OutputStreamWriter;
 import java.io.Writer;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.net.SocketTimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import com.example.util.Log;
 
 public class TcpServer implements Runnable {
     private static final String TAG = "TcpServer";
+    private static final int DEFAULT_TIMEOUT_MS = 1000;
 
     ServerSocket mServerSocket;
     Thread mThread;
     AtomicBoolean mExitFlag;
+    int mTimeoutMs;
 
-    protected TcpServer(ServerSocket serverSocket) {
+
+    protected TcpServer(ServerSocket serverSocket, int timeoutMs) {
         mServerSocket = serverSocket;
         mThread = new Thread(this);
         mExitFlag = new AtomicBoolean(false);
+        mTimeoutMs = timeoutMs;
         mThread.start();
     }
 
     public static TcpServer create(int port) {
+        return create(port, DEFAULT_TIMEOUT_MS);
+    }
+
+    public static TcpServer create(int port, int timeoutMs) {
         try {
             ServerSocket serverSocket = new ServerSocket(port);
-            return new TcpServer(serverSocket);
+            serverSocket.setSoTimeout(timeoutMs);
+            return new TcpServer(serverSocket, timeoutMs);
         } catch (IOException e) {
             Log.e(TAG, "Could not create a Server Socket which listening at port " + port);
         }
@@ -62,16 +72,42 @@ public class TcpServer implements Runnable {
         }
 
         while (!mExitFlag.get()) {
+            Socket remoteSocket;
+            Log.i(TAG, "Waiting for client ...");
             try {
-                Socket remoteSocket = mServerSocket.accept();
+                remoteSocket = mServerSocket.accept();
+            } catch (SocketTimeoutException e) {
+                // Ignore
+                continue;
+            } catch (IOException e) {
+                Log.e(TAG, "Something was wrong!", e);
+                break;
+            }
+
+            if (null == remoteSocket) {
+                continue;
+            }
+
+            try {
+                remoteSocket.setSoTimeout(mTimeoutMs);
                 Writer writer = new OutputStreamWriter(remoteSocket.getOutputStream(), "UTF-8");
                 writer.write("Hello :D\n");
                 writer.flush();
 
                 BufferedReader reader = new BufferedReader(new InputStreamReader(remoteSocket.getInputStream()));
-                Log.i(TAG, String.format("Received: '%s'", reader.readLine()));
+                while (!mExitFlag.get()) {
+                    try {
+                        Log.i(TAG, String.format("Received: '%s'", reader.readLine()));
+                        break;
+                    } catch (SocketTimeoutException e) {
+                        Log.i(TAG, "Rx timeout!");
+                        continue;
+                    }
+                }
+
                 reader.close();
-                writer.close();remoteSocket.close();
+                writer.close();
+                remoteSocket.close();
             } catch (IOException e) {
                 Log.e(TAG, "Something was wrong!", e);
                 break;

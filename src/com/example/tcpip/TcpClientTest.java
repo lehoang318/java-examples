@@ -15,16 +15,20 @@ public class TcpClientTest {
     private static final int REMOTE_PORT = 3188;
 
     public static void main(String[] args) {
+        BufferedReader consoleReader = new BufferedReader(new InputStreamReader(System.in));
+
         try (Socket socket = new Socket(REMOTE_ADDR, REMOTE_PORT)) {
             BufferedReader reader = new BufferedReader(new InputStreamReader(socket.getInputStream()));
             Log.i(TAG, String.format(Locale.US, "Received: '%s'", (reader.readLine())));
+
+            Log.i(TAG, "Press any key to send data to server ...");
+            consoleReader.readLine();
 
             OutputStreamWriter writer = new OutputStreamWriter(socket.getOutputStream());
             writer.write("Nice to meet you!\n");
             writer.flush();
 
             Log.i(TAG, "Press any key to exit ...");
-            BufferedReader consoleReader = new BufferedReader(new InputStreamReader(System.in));
             consoleReader.readLine();
         } catch (IOException e) {
             Log.e(
